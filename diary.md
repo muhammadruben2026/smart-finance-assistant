@@ -27,3 +27,9 @@ Identify any unusual transactions (very high or negative amounts) Each function 
 
 ### AI Collaboration # 3 
 **Context**: Needed AI to help generate Business insights 
+
+**Prompt**: "Using the transaction analysis functions, help me create a comprehensive spending report that would be useful for personal financial planning. Include recommendations for potential savings and spending pattern observations. Format it like a professional financial summary."
+
+**Result**: It implemented the spending report in the code and gave a descritpion on what it did and why. The AI also formatted it to look like a professional financial summary. 
+
+**Reflection**: What worked well was that AI was able to format it like a professional financial summary and keep it structured and clear. What didn't work well was that AI didn't explain what it did until I had to ask what it did and why it did it, I learned that AI can structure things better and professionally which saves alot of time especially for those who need things done quickly. 
