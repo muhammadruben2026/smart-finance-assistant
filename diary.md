@@ -256,6 +256,170 @@ Spread over time: $730.50 ÷ 12 = $60.88 a month (or $121.75 a month if saved ov
 
 ### AI Collaboration # 9 
 
+***Context**: Using AI to help convert the pseudocode into python following the starter notebook instructions and prompt. 
+
+**Prompt**: "I'm implementing a Smart Finance Assistant. Based on my pseudocode, please create
+a Python function that [specific functionality]. The code should:
+- Handle real-world CSV data issues (dollar signs, missing values)
+- Include clear comments explaining business logic
+- Use professional variable names
+- Format output for business presentation
+- Include basic error handling"
+
+**Result**: """
+Tests for spending_analysis.py  (Step 6: Test with a Variety of Data)
+Run:  python test_spending_analysis.py        (from the folder containing the CSV files)
+In a notebook: paste the body of run_all_tests() into your Testing section.
+"""
+import math
+
+from spending_analysis import (analyze_spending_data, format_report, parse_amount, parse_date,
+                               categorise_description, money)
+
+# ---- Test data dictionaries (spending POSITIVE, refunds NEGATIVE, as in the assignment example) ----
+sample_transactions = {
+    'Date':        ['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05',
+                    '2026-08-06', '2026-08-07', '2026-08-08'],
+    'Amount':      ['$45.50', '$12.00', '$89.95', '$3.50', '-$25.00', '$1,250.00', '$68.40', '$7.20'],
+    'Category':    ['Groceries', 'Transport', 'Entertainment', 'Coffee', 'Refund',
+                    'Rent', 'Utilities', 'Dining'],
+    'Description': ['Woolworths Canning Vale', 'Transperth SmartRider', 'Ticketek Concert',
+                    'Campus Cafe Curtin', 'Kmart Returned Item', 'Ray White Rent',
+                    'Synergy Electricity', 'Boost Juice Garden City'],
+}
+edge_case_transactions = {
+    'Date':        ['2026-08-01', '2026-08-01', '01/08/2026', 'not a date', '2026-08-09',
+                    '2026-08-10', '', '2026-08-12', '2026-08-13'],
+    'Amount':      ['$45.50', '$45.50', '$1,203.50', '$12.00', '',
+                    '(25.00)', '$9.99', '0.00', 'abc'],
+    'Category':    ['Groceries', 'Groceries', 'rent', 'Transport', 'Dining',
+                    'Refund', 'Coffee', 'Other', 'Shopping'],
+    'Description': ['Woolworths', 'Woolworths', '  RENT payment  ', 'Transperth', 'Hungry Jacks',
+                    'Bunnings Return', 'Dome Cafe', 'Mystery charge', 'Amazon AU'],
+}
+
+
+def approx(a, b, tol=0.01):
+    return abs(a - b) <= tol
+
+
+def run_all_tests():
+    # 1. Helper functions ------------------------------------------------------
+    assert parse_amount("$1,203.50") == 1203.50
+    assert parse_amount("-$25.00") == -25.0
+    assert parse_amount("$-25.00") == -25.0
+    assert parse_amount("(25.00)") == -25.0
+    assert parse_amount(45.5) == 45.5
+    assert parse_amount("") is None and parse_amount("abc") is None and parse_amount(None) is None
+    assert str(parse_date("2026-08-01").date()) == "2026-08-01"        # ISO is not flipped
+    assert str(parse_date("01/08/2026").date()) == "2026-08-01"        # day-first
+    assert str(parse_date("03/04/2026").date()) == "2026-04-03"        # ambiguous date read day-first
+    assert parse_date("not a date") is parse_date("") or str(parse_date("")) == "NaT"
+    assert categorise_description("WOOLWORTHS CANNING VALE") == "Groceries"
+    assert categorise_description("UBER EATS") == "Dining"
+    assert categorise_description("UBER TRIP PERTH") == "Transport"
+    assert categorise_description("BPAY something") == ""             # 'bp' must not match inside 'BPAY'
+    assert money(1234.5) == "$1,234.50" and money(-5) == "-$5.00"
+    print("OK 1: helper functions")
+
+    # 2. Clean sample CSV (364 rows) --------------------------------------------
+    r = analyze_spending_data("sample_transactions.csv")
+    assert r["ok"] and r["cleaning_report"]["rows_out"] == 364
+    t = r["totals"]
+    assert approx(t["income"], 37938.70) and approx(t["net_spending"], 36156.03)
+    assert approx(t["net_saved"], 1782.67) and t["savings_rate_pct"] == 4.7
+    cats = r["categories"].set_index("category")
+    assert approx(cats.loc["Housing", "net_spending"], 15562.40)
+    assert r["categories"].iloc[0]["category"] == "Housing"           # sorted, biggest first
+    assert approx(r["categories"]["share_pct"].sum(), 100, 0.5)       # shares add up to ~100%
+    assert "Other" not in cats.index                                  # every merchant categorised
+    assert any("RENT" in m for m in r["recurring"]["merchant"])       # rent detected as recurring
+    assert not any(r["one_offs"]["category"].isin(["Housing", "Utilities", "Insurance"]))
+    names = " ".join(r["one_offs"]["description"])
+    assert "QANTAS" in names and "AIRBNB" in names                    # trip flagged as one-off
+    assert r["savings_rate_without_one_offs_pct"] > t["savings_rate_pct"]
+    print("OK 2: clean CSV")
+
+    # 3. Messy CSV: bad rows removed and reported ----------------------------------
+    r = analyze_spending_data("messy_transactions.csv")
+    rep = r["cleaning_report"]
+    assert r["ok"] and rep["rows_in"] == 366 and rep["rows_out"] == 362
+    assert rep["dropped_invalid_date"] == 2          # 'not a date' + blank row
+    assert rep["dropped_invalid_amount"] == 1        # missing amount
+    assert rep["dropped_duplicates"] == 1
+    assert rep["rows_in"] - rep["rows_out"] == sum(v for k, v in rep.items() if k.startswith("dropped_"))
+    print("OK 3: messy CSV")
+
+    # 4. Dict inputs with spending positive ------------------------------------------
+    r = analyze_spending_data(sample_transactions, spending_is_negative=False)
+    assert r["ok"] and r["cleaning_report"]["rows_out"] == 8
+    t = r["totals"]
+    assert approx(t["gross_spending"], 1476.55) and approx(t["refunds"], 25.0)
+    assert approx(t["net_spending"], 1451.55)        # refund reduces spending
+    assert t["income"] == 0 and t["savings_rate_pct"] is None   # no income -> no divide-by-zero
+    cats = r["categories"].set_index("category")
+    assert approx(cats.loc["Dining", "net_spending"], 10.70)    # 'Coffee' aliased to Dining
+    assert approx(cats.loc["Housing", "net_spending"], 1250.0)  # 'Rent' aliased to Housing
+    assert "No income" in " ".join(r["insights"])
+    print("OK 4: sample dict")
+
+    r = analyze_spending_data(edge_case_transactions, spending_is_negative=False)
+    rep = r["cleaning_report"]
+    assert r["ok"] and rep["rows_in"] == 9 and rep["rows_out"] == 4
+    assert rep["dropped_invalid_date"] == 2 and rep["dropped_invalid_amount"] == 2
+    assert rep["dropped_duplicates"] == 1
+    assert approx(r["totals"]["refunds"], 25.0)                 # "(25.00)" read as a refund
+    assert approx(r["totals"]["gross_spending"], 45.50 + 1203.50)
+    print("OK 4b: edge-case dict")
+
+    # 5. Savings goal feasibility ----------------------------------------------------
+    on_track = analyze_spending_data("sample_transactions.csv", required_monthly_saving=250.0)
+    assert any("On track" in s for s in on_track["insights"])           # surplus is about $296/month
+    short = analyze_spending_data("sample_transactions.csv", required_monthly_saving=900.0)
+    assert any("Shortfall" in s for s in short["insights"])
+    print("OK 5: goal feasibility")
+
+    # 6. Error handling: never raises -------------------------------------------------
+    bad_inputs = {
+        "missing file": "no_such_file.csv",
+        "empty dict": {},
+        "missing column": {"Date": ["2026-01-01"], "Description": ["x"]},
+        "all rows invalid": {"Date": ["bad"], "Amount": ["abc"], "Description": ["x"]},
+    }
+    for label, bad in bad_inputs.items():
+        out = analyze_spending_data(bad)
+        assert out["ok"] is False and out["error"], label
+        assert format_report(out).startswith("Could not analyse"), label
+    print("OK 6: error handling")
+
+    # 7. Tiny and unusual data ----------------------------------------------------------
+    one_row = analyze_spending_data({"date": ["2026-08-01"], "description": ["Woolworths"], "amount": ["-50"]})
+    assert one_row["ok"] and approx(one_row["totals"]["net_spending"], 50)
+    assert one_row["period"]["months_covered"] == 1.0                    # never extrapolates short data
+    income_only = analyze_spending_data({"date": ["2026-08-01"], "description": ["Salary"], "amount": ["1000"]})
+    assert income_only["ok"] and income_only["totals"]["net_spending"] == 0
+    assert income_only["totals"]["savings_rate_pct"] == 100.0
+    transfer = analyze_spending_data({"date": ["2026-08-01", "2026-08-02"],
+                                      "description": ["Transfer to savings", "Coles"],
+                                      "amount": ["-500", "-20"]})
+    assert transfer["cleaning_report"]["dropped_transfers"] == 1
+    assert approx(transfer["totals"]["net_spending"], 20)
+    print("OK 7: tiny and unusual data")
+
+    # 8. Report formatting -----------------------------------------------------------------
+    text = format_report(analyze_spending_data("sample_transactions.csv"))
+    for needle in ("SPENDING REPORT", "$37,938.70", "SPENDING BY CATEGORY", "INSIGHTS", "DATA QUALITY"):
+        assert needle in text, needle
+    print("OK 8: report formatting")
+    print("\nAll tests passed.")
+
+
+if __name__ == "__main__":
+    run_all_tests()
+
+**Reflection**: AI managed to generate and convert my pseudocode to python and assist in building my finance assistant. AI code did run into errors but with simple fixes the code is able to run. 
+
+## AI Collaboration # 10 
 
 
 
