@@ -180,4 +180,82 @@ Spread over time: $730.50 ÷ 12 = $60.88 a month (or $121.75 a month if saved ov
 
 ### AI Collaboration # 8 
 
+***Context**: Writing Pseudocode basically sketching the algorithm in plain english before coding, using the example prompt from the starter notebook. 
+
+**Prompt**: FUNCTION analyze_spending_data(csv_file):
+    // Step 1: Load and validate data
+    - Read CSV file into DataFrame
+    - Check for required columns (Date, Amount, Category, Description)
+    - Handle missing or invalid data
+    
+    // Step 2: Clean financial data  
+    - Remove dollar signs from Amount column
+    - Convert to numeric values
+    - Separate positive spending from refunds
+    
+    // Step 3: Calculate business metrics
+    - Group transactions by category
+    - Calculate totals, averages, counts per category
+    - Identify spending patterns and outliers
+    
+    // Step 4: Generate insights
+    - Calculate percentages of total spending
+    - Identify top spending categories
+    - Suggest potential savings opportunities
+    
+    // Step 5: Format for presentation
+    - Create business-friendly output
+    - Include currency formatting
+    - Add explanatory text for insights
+    
+    RETURN formatted_analysis
+"Review my pseudocode for analyzing spending data from a CSV. Are there any edge cases I'm missing? What business logic should I add to make this more valuable for personal finance insights?"
+
+**Result**: FUNCTION analyze_spending_data(csv_file):
+    # 1. Load and validate
+    TRY read CSV                     ON FAIL -> RETURN error message
+    normalise column names (strip, lowercase, map aliases)
+    IF date or amount column missing -> RETURN error message
+    IF category column missing -> create it from description keyword rules
+    IF fewer than 1 valid row -> RETURN "not enough data"
+
+    # 2. Clean (and keep a report of what was removed)
+    parse dates (ISO first, then day/month/year); invalid -> drop, count
+    parse amounts (remove $ and commas, "(x)" -> negative); invalid -> drop, count
+    remove exact duplicates, count
+    remove internal transfers, count
+    cleaning_report = {rows_in, rows_out, dropped by reason}
+
+    # 3. Split
+    income    = rows where amount > 0 and category is Income
+    refunds   = rows where amount > 0 and category is not Income
+    spending  = rows where amount < 0
+    net spending per category = spending - refunds in that category
+
+    # 4. Metrics (guard every division)
+    months = days between first and last date / 30.44
+    savings_rate = (income - net spending) / income   IF income > 0
+    per category: total, count, average, share of net spending
+    fixed vs flexible split
+    month-by-month totals and change vs average
+    recurring charges (same merchant, similar amount, about monthly)
+    one-offs: transactions above threshold; savings rate without them
+    uncategorised share
+
+    # 5. Insights (rules on the numbers)
+    top 3 categories
+    FOR each rule (dining > 15%, subscription total, category up > 20%, ...):
+        IF triggered -> add insight text using the actual numbers
+    IF goal given -> feasibility = monthly surplus vs monthly saving needed
+
+    # 6. Return
+    RETURN { metrics, insights, cleaning_report }     # data, not text
+    FUNCTION format_report(result) -> currency-formatted summary   # separate step
+
+**Reflection**: The AI managed to polish up on the pseudocode and add lists its own recommendation and what I should add to the pseudocode before I start actually coding, again it gave me a bunch of information which was difficult to look at first but going through its section by section helped developed my understanding for this pseudocode writing. 
+
+### AI Collaboration # 9 
+
+
+
 
