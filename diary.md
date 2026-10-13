@@ -72,3 +72,112 @@ Analysis: find charges with the same merchant and similar amount that repeat mon
 Output: “5 recurring charges total $187/month. Netflix rose from $16.99 to $18.99.”
 
 **Reflection**: AI again was able to generate multiple finance problems to help tackle my challenge and this helped me brainstorm what finance problem I wanted my Finance Assistant to tackle. Everything worked well for this section, I liked how AI listed problems and the analysis to further explain these financial problems people face in their day to day lives.
+
+### AI Collaboration # 6 
+***Context**: Using AI to help find what inputs and outputs I should collect for my finance tracker and what I should expect for a good result, following the starter notebooks prompt. 
+
+**Prompt**: "For a personal finance assistant that analyzes CSV transaction data, what are the most valuable inputs I should collect and outputs I should provide? Consider both technical data processing and business value for the user." 
+
+**Result**: Inputs
+Input	Technical considerations	Business value	Keep?
+Transaction CSV (date, description, amount)	Clean $ signs, commas and mixed date formats, remove duplicates and bad rows, and decide the sign convention for spending vs income	The raw material for everything else	Required
+Savings goal amount	A number greater than 0	Gives the analysis a target	Required
+Deadline (months or years)	A whole number greater than 0, and convert years to months	Turns a wish into a plan	Required
+Current savings	Optional, default 0, can’t be negative	Makes the monthly figure realistic	Optional
+Interest rate	Optional, default 0	Shows what a savings account would add	Optional
+Category (if the bank provides it)	Otherwise auto-categorise from the description with keyword rules	Shows where money goes	Derived
+Monthly income	Can be detected from salary rows in the CSV, or entered manually	Needed for savings rate and budget percentages	Derived or manual
+Chat questions	Free text, passed to the LLM	Personalised coaching	Required
+Extra documents (notes, budget tips)	.txt/.md files for RAG	Grounds the advice in real sources	Optional
+Outputs
+Output	Technical considerations	Business value	Keep?
+Monthly saving needed	Compound-interest formula, with edge cases like a goal already reached	The number that answers “what do I do?”	Core
+Savings rate (income − spending) ÷ income	Handle zero income	Shows whether the person is on track	Core
+Spending by category	groupby plus a sort	Makes spending visible	Core
+Feasibility check: can they afford the required monthly amount?	Compare the required amount to the actual monthly surplus	The most actionable output: “your goal needs $258/mo but you currently save $297/mo, so you’re fine”	Core
+Top habits to trim (small frequent purchases, subscriptions)	Frequency counts and recurring-charge detection	Shows concrete places to find savings	Strong
+Coach message with a tip	LLM with a system prompt, grounded in the analysis numbers	Motivation, which is half the problem	Core
+Month-to-month trend	Group by month and compare	Shows if things are getting better or worse	Nice to have
+Unusual transactions	Outlier detection	Catches errors and one-offs	Nice to have
+Chart (spending by category)	One simple Gradio plot	Faster to understand than a table	Nice to have
+Cleaning report: how many rows were removed and why	Count rows before and after	Builds trust in the numbers	Good for testing
+
+**Reflection**: AI created two clean tables showing what Inputs I should be collecting, or ensuring I use to get effective use from my finance assistant, Maybe a problem was that AI generated a bit too much to keep track of but the tables compensated for it. 
+
+### AI Collaboration # 7
+***Context**: Using AI to help generate realistic examples of Australian transactions to help with manual calculations, using the starer notebook prompt. 
+
+**Prompt**: Give me 3 realistic examples of Australian transaction data with different scenarios (normal spending, refunds, large purchases). Show me how to manually calculate meaningful financial insights from each scenario." 
+
+**Result**: Scenario 1: Normal spending (one fortnight)
+Date	Description	Category	Amount
+02/10	Salary, ACME Logistics	Income	+2,865.40
+03/10	Ray White Rent	Housing	−1,150.00
+03/10	Woolworths Canning Vale	Groceries	−112.35
+04/10	Ampol Canning Vale	Transport	−78.20
+05/10	Telstra Mobile	Utilities	−69.00
+06/10	Dome Cafe Fremantle	Dining	−6.80
+08/10	Uber Eats	Dining	−38.90
+09/10	Netflix	Entertainment	−18.99
+09/10	Spotify	Entertainment	−13.99
+10/10	Coles Southlake	Groceries	−64.80
+11/10	Hungry Jacks	Dining	−14.50
+12/10	Transperth SmartRider	Transport	−20.00
+
+By hand
+
+Income: $2,865.40
+Total spending: add all the negatives: 1,150.00 + 112.35 + 78.20 + 69.00 + 6.80 + 38.90 + 18.99 + 13.99 + 64.80 + 14.50 + 20.00 = $1,587.53
+Net saved: 2,865.40 − 1,587.53 = $1,277.87
+Savings rate: 1,277.87 ÷ 2,865.40 × 100 = 44.6%
+By category (% of spending): Housing $1,150.00 (72.4%), Groceries $177.15 (11.2%), Transport $98.20 (6.2%), Utilities $69.00 (4.3%), Dining $60.20 (3.8%), Entertainment $32.98 (2.1%). These add up to 100%.
+Fixed vs flexible: fixed costs are rent + phone + Netflix + Spotify = $1,251.98 (78.9% of spending). Flexible is $335.55 (groceries, transport, dining).
+
+Insight: this person saves a lot in this fortnight. But 79% of spending is fixed, so the room to cut is the $335.55 flexible portion, and dining ($60.20) is the easiest part of it.
+
+Scenario 2: Refunds (one month of shopping)
+Date	Description	Category	Amount
+02/09	Kmart Carillon	Shopping	−85.00
+04/09	JB Hi-Fi Garden City	Shopping	−279.00
+06/09	The Iconic	Shopping	−160.00
+10/09	Bunnings Warehouse	Shopping	−140.00
+12/09	Kmart Carillon (refund)	Shopping	+25.00
+15/09	The Iconic (refund)	Shopping	+160.00
+18/09	Bunnings (return)	Shopping	+62.50
+20/09	Woolworths Canning Vale	Groceries	−95.20
+
+By hand (Shopping only)
+
+Gross shopping: 85.00 + 279.00 + 160.00 + 140.00 = $664.00
+Refunds: 25.00 + 160.00 + 62.50 = $247.50
+Net shopping: 664.00 − 247.50 = $416.50
+Refund share: 247.50 ÷ 664.00 × 100 = 37.3% of what was bought came back
+The trap: if you only add up the negative amounts, you get $664.00. That overstates real spending by 247.50 ÷ 416.50 = 59.4%.
+
+Insight: refunds should be netted against the category they belong to, not counted as income. Otherwise spending looks too high, and if refunds are added to income, income looks too high. A pattern also shows up: 3 of the 4 purchases were returned (75%), which a coach could point out as impulse buying.
+
+Scenario 3: Large purchase (one month with a trip)
+Item	Category	Amount
+Salary × 2	Income	+5,730.80
+Rent × 2	Housing	−2,300.00
+Groceries	Groceries	−480.00
+Dining	Dining	−210.00
+Transport	Transport	−260.00
+Bills	Utilities	−320.00
+Subscriptions	Entertainment	−32.98
+Qantas Perth–Melbourne	Travel	−318.00
+Airbnb Melbourne	Travel	−412.50
+
+By hand
+
+Total spending: 2,300.00 + 480.00 + 210.00 + 260.00 + 320.00 + 32.98 + 318.00 + 412.50 = $4,333.48
+Net saved: 5,730.80 − 4,333.48 = $1,397.32, a savings rate of 24.4%
+The trip: 318.00 + 412.50 = $730.50, or 16.9% of the month’s spending
+Without the trip: spending is 4,333.48 − 730.50 = $3,602.98, net saved is $2,127.82, and the rate is 37.1%
+Spread over time: $730.50 ÷ 12 = $60.88 a month (or $121.75 a month if saved over 6 months)
+
+**Reflection**: AI was useful in generating realistic Australian transactions to help me with my manual calculations, however AI generated alot of content for such a simple question in my opinion and it guided me through manual calculations which I felt like I could've done myself. 
+
+### AI Collaboration # 8 
+
+
