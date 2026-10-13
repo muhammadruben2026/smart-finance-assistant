@@ -1,4 +1,4 @@
-## Week 8: Initial CSV Processing 
+AI Collaborations 
 ### AI collaboration # 1
 **Context**: I was trying to get AI to load a CSV file with transaction data using the prompt the module/lab gave us, getting the AI to do the provided cleaning and writing the professional python code. 
 
@@ -33,3 +33,42 @@ Identify any unusual transactions (very high or negative amounts) Each function 
 **Result**: It implemented the spending report in the code and gave a descritpion on what it did and why. The AI also formatted it to look like a professional financial summary. 
 
 **Reflection**: What worked well was that AI was able to format it like a professional financial summary and keep it structured and clear. What didn't work well was that AI didn't explain what it did until I had to ask what it did and why it did it, I learned that AI can structure things better and professionally which saves alot of time especially for those who need things done quickly. 
+
+
+### AI Collaboration # 4
+**Context**: Needed AI to generate CSV transaction sample data for the starter notebook. 
+
+**Prompt**: "Hi Claude could you create realistic sample transaction data that includes Australia businesses and various spending categories."
+
+**Result**: Claude generated a file of sample transaction data, transactions that included the date, amount, time, category, description. Was able to implement in the cell and answer the following questions in assisting in building my Finance Assistant. 
+
+**Reflection**: What worked well was that AI could generate this list in a short time and give me data to work off for my project, there wasn't much the didn't work well in this scenario as its pretty hard to mess up for the AI I think. 
+
+
+### AI Collaboration # 5 
+**Context**: Help brainstorm a finance problem as instructed by the starter notebook using the example prompt given. 
+
+**Prompt**: Help me brainstorm specific personal finance problems that could be solved
+with a CSV analysis tool. I'm interested in helping people with budgeting and spending awareness. What are common financial challenges that data analysis could address?"
+
+**Result**: Here are common budgeting and spending-awareness problems that a CSV of transactions can address. They’re grouped by what the analysis actually does with the data.
+
+1. “Where did my money go?”
+
+Problem: people can’t say what they spent last month, only that the account is low.
+Analysis: categorise each transaction and total it by category, then show each category as a percentage of spending.
+Output: “Dining out was 18% of your spending, $612 across 31 transactions.”
+
+2. Small purchases that add up
+
+Problem: $6 coffees and $20 delivery orders feel harmless one at a time.
+Analysis: group by merchant or category and count the frequency, so the total is shown next to the number of purchases.
+Output: “You bought coffee 22 times this month for $142. Over a year that’s about $1,700.”
+
+3. Forgotten or creeping subscriptions
+
+Problem: people pay for services they’ve stopped using, and prices rise without notice.
+Analysis: find charges with the same merchant and similar amount that repeat monthly, then flag price changes.
+Output: “5 recurring charges total $187/month. Netflix rose from $16.99 to $18.99.”
+
+**Reflection**: AI again was able to generate multiple finance problems to help tackle my challenge and this helped me brainstorm what finance problem I wanted my Finance Assistant to tackle. Everything worked well for this section, I liked how AI listed problems and the analysis to further explain these financial problems people face in their day to day lives.
