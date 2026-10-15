@@ -563,4 +563,148 @@ def run_all_tests():
 
 run_all_tests()
 
-6. Test with a verity of Data - 
+6. Test with a verity of Data -
+OK 1: sample CSV
+OK 2: messy data
+OK 3: purchases-positive data
+OK 4: unusual data
+OK 5: error messages
+
+All tests passed.
+
+**4. Professional Financial Recommendations** 
+1. Understand the problem - Generating professional financial recommendations based on spending analysis, observing patterns, trends and generating actionable advice formatted for a financial assistant user.
+
+2. Inputs - Spending Analysis Data, CSV 
+Outputs - Actionable advice, spending patterns/trends
+
+3. Work the Problem by hand - Snapshot or summary of the users spending habits, action plan - what type of actions the user should be doing to help save some extra money.
+
+4. Write Pseudo Code - Needs: "Housing", "Utilities", "Insurance", "Groceries", "Transport", "Health".
+Wants: "Dining", "Entertainment", "Shopping", "Travel", "Cash"
+
+5. Convert to Python - # Business rules - edit these to tune the advice
+CUT_PERCENT = 20          # how much of each "want" category to suggest trimming
+TARGET_SAVINGS_RATE = 20  # common guide: save ~20% of income
+SMALL_HABIT_CUT = 25      # suggest trimming small purchases by this percent
+_REC_NEEDS = {"Housing", "Utilities", "Insurance", "Groceries", "Transport", "Health"}
+_REC_WANTS = {"Dining", "Entertainment", "Shopping", "Travel", "Cash"}
+
+
+def _dollars(amount):
+    """1234.5 -> $1,234.50"""
+    return f"-${abs(amount):,.2f}" if amount < 0 else f"${amount:,.2f}"
+
+
+def generate_financial_recommendations(analysis_data):
+    """
+    Generate actionable financial recommendations based on spending analysis
+
+    🤖 AI Collaboration Prompt:
+    "Based on spending analysis data, create professional financial
+    recommendations. Include specific savings opportunities, spending
+    pattern observations, and actionable advice formatted for a
+    personal finance app user."
+
+    Args:
+        analysis_data: Dictionary with spending analysis results
+                       (the result of analyze_spending_patterns(df))
+    Returns:
+        str: Formatted recommendations report
+
+    Raises:
+        ValueError: if the analysis results are missing or incomplete.
+    """
+    # --- 1. Validate the input ----------------------------------------------------
+    needed = ("summary", "by_category", "small_purchases")
+    if not isinstance(analysis_data, dict) or any(key not in analysis_data for key in needed):
+        raise ValueError("These recommendations need the results of the spending analysis. "
+                         "Run  analysis = analyze_spending_patterns(df)  first, then pass `analysis` in.")
+    summary, table, small = analysis_data["summary"], analysis_data["by_category"], analysis_data["small_purchases"]
+    months = summary["months_covered"]
+    income, saved, rate = summary["income"], summary["net_saved"], summary["savings_rate_pct"]
+    monthly_income = income / months
+    monthly_surplus = saved / months
+
+    # --- 2. Spending pattern observations --------------------------------------------
+    observations = []
+    for row in table.head(3).to_dict("records"):
+        observations.append(f"{row['Category']} is {row['Share %']}% of your spending "
+                            f"({_dollars(row['Per Month'])} a month).")
+    needs_total = table.loc[table["Category"].isin(_REC_NEEDS), "Total"].sum()
+    wants_total = table.loc[table["Category"].isin(_REC_WANTS), "Total"].sum()
+    needs_pct = wants_pct = None
+    if income > 0:
+        needs_pct, wants_pct = needs_total / income * 100, wants_total / income * 100
+        observations.append(f"Essentials take {needs_pct:.1f}% of income (guide: 50%) and "
+                            f"wants take {wants_pct:.1f}% (guide: 30%).")
+
+    # --- 3. Savings opportunities: trim the biggest "wants" ---------------------------------
+    wants = table[table["Category"].isin(_REC_WANTS) & (table["Total"] > 0)].sort_values("Per Month", ascending=False)
+    opportunities, monthly_cuts = [], 0.0
+    for row in wants.head(3).to_dict("records"):
+        saving = row["Per Month"] * CUT_PERCENT / 100
+        monthly_cuts += saving
+        opportunities.append(f"{row['Category']}: trim by {CUT_PERCENT}% to save about "
+                             f"{_dollars(saving)} a month ({_dollars(saving * 12)} a year).")
+    habit_monthly = 0.0
+    if small["count"] >= 10:
+        habit_monthly = small["per_year"] * SMALL_HABIT_CUT / 100 / 12
+        opportunities.append(f"Small purchases: {small['count']} purchases under $25 total {_dollars(small['total'])}. "
+                             f"Trimming {SMALL_HABIT_CUT}% would save about {_dollars(habit_monthly)} a month "
+                             "(this overlaps with the categories above).")
+
+    # --- 4. Snapshot and the gap to the savings target ----------------------------------------
+    snapshot, gap = [], None
+    if income <= 0:
+        snapshot.append("No income was found in the data, so a savings rate can't be calculated.")
+    else:
+        snapshot.append(f"Savings rate: {rate}% (guide: {TARGET_SAVINGS_RATE}%).")
+        snapshot.append(f"Average monthly income {_dollars(monthly_income)}, "
+                        f"saving about {_dollars(monthly_surplus)} a month.")
+        gap = monthly_income * TARGET_SAVINGS_RATE / 100 - monthly_surplus
+
+    # --- 5. Action plan (most important first) -----------------------------------------------------
+    actions = []
+    if gap is not None and gap <= 0:
+        actions.append(f"You're at or above the {TARGET_SAVINGS_RATE}% guide. Move about {_dollars(monthly_surplus)} a "
+                       "month into a separate savings account so it isn't spent.")
+    elif gap is not None:
+        if saved < 0:
+            actions.append(f"Spending is {_dollars(-saved)} above income over this period, so the first priority is "
+                           "bringing spending below income.")
+        if monthly_cuts > 0 and saved < 0:
+            actions.append(f"Start with the trims above, which free up about {_dollars(monthly_cuts)} a month, "
+                           "then review essentials for further savings.")
+        elif monthly_cuts > 0:
+            share = min(monthly_cuts / gap * 100, 100)
+            actions.append(f"Set up an automatic transfer of about {_dollars(monthly_cuts)} on payday, funded by the "
+                           f"trims above. That closes roughly {share:.0f}% of the {_dollars(gap)} monthly gap to "
+                           f"a {TARGET_SAVINGS_RATE}% savings rate.")
+        else:
+            actions.append(f"Find about {_dollars(gap)} a month to reach a {TARGET_SAVINGS_RATE}% savings rate.")
+    if habit_monthly > 0:
+        weekly_cap = small["per_year"] / 52 * (1 - SMALL_HABIT_CUT / 100)
+        actions.append(f"Set a weekly limit of about {_dollars(weekly_cap)} for small purchases like coffee and takeaway.")
+    if needs_pct is not None and needs_pct > 50:
+        actions.append(f"Essentials are {needs_pct:.0f}% of income. Compare providers for insurance, phone, internet "
+                       "and energy, since cutting wants alone may not be enough.")
+    actions.append("Re-run this report next month to see whether the changes are working.")
+
+    # --- 6. Format the report ------------------------------------------------------------------------------
+    def section(title, items, numbered=False):
+        lines = ["", title]
+        for number, item in enumerate(items, 1):
+            lines.append(f"  {number}. {item}" if numbered else f"  - {item}")
+        return lines
+
+    report = ["FINANCIAL RECOMMENDATIONS", "=" * 58]
+    report += section("YOUR SNAPSHOT", snapshot)
+    report += section("WHERE YOUR MONEY GOES", observations)
+    if opportunities:
+        report += section("SAVINGS OPPORTUNITIES", opportunities)
+    report += section("YOUR ACTION PLAN", actions, numbered=True)
+    report += ["", "General information only, not licensed financial advice."]
+    return "\n".join(report)
+
+6. Test with a Variety of Data - 
