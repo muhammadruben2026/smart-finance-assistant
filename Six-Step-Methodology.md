@@ -1175,4 +1175,361 @@ print(savings_tool("abc"))
 6. Test with a Variety of Data - All Tests Passed.
 
 
-**
+**8. Gradio UI Integration** 
+1. Understand the problem - Making a UI that combines all the featuers above such as CSV data, finance chatbot, custom tools in a UI that is friendly for users.
+
+2. Inputs - CSV Data, chatbot, custom financial tools 
+Outputs - A UI that is easy to navigate around for users and find what they're looking for. 
+
+3. Work the problem by hand - A UI that is easy to navigate. 
+
+4. Write Pseduocode - for example, for custom financial tools click here, for csv data and your spending trends/habits click here, etc. 
+
+5. Convert to python - import re
+
+import gradio as gr
+
+# This cell uses the functions from your earlier cells. Run those cells first (in order).
+_NEEDED = ["load_and_clean_transaction_data", "analyze_spending_patterns", "generate_financial_recommendations",
+           "setup_financial_rag", "savings_goal_calculator", "penny_reply"]
+_missing = [name for name in _NEEDED if name not in globals()]
+if _missing:
+    print("Run these earlier cells first. Still missing:", ", ".join(_missing))
+
+SAMPLE_CSV = "sample_transactions.csv"
+
+
+# --- Handlers: plain functions, so you can also test them without the UI ------------------------------
+def analyse_file(uploaded_file):
+    """Load a CSV (the upload, or the sample file if nothing was uploaded) and return report, advice, table."""
+    global df, analysis, rag_search
+    path = getattr(uploaded_file, "name", uploaded_file) or SAMPLE_CSV     # works with any Gradio version
+    try:
+        df = load_and_clean_transaction_data(path, verbose=False)
+        analysis = analyze_spending_patterns(df)
+        rag_search = setup_financial_rag()                                 # re-index with the new transactions
+        status = f"Loaded {len(df)} transactions from {path}."
+        return status, analysis["report"], generate_financial_recommendations(analysis), analysis["by_category"]
+    except Exception as problem:                                           # show a friendly message, never crash
+        return f"Sorry, I couldn't analyse that file: {problem}", "", "", None
+
+
+def goal_tool(current, monthly, target, rate):
+    """Run the savings goal calculator tool from the form fields."""
+    try:
+        text = f"{current or 0}, {monthly or 0}, {target or 0}, {rate or 0}"
+        return savings_goal_calculator(text)
+    except Exception as problem:
+        return f"Sorry, something went wrong: {problem}"
+
+
+def finance_chat(message, history):
+    """Chat router: savings maths -> calculator tool; otherwise Penny, helped by the RAG guides."""
+    try:
+        if not str(message).strip():
+            return "Ask me anything about budgeting, saving or your spending."
+        numbers = re.findall(r"\d[\d,]*\.?\d*", str(message))
+        if len(numbers) >= 3 and re.search(r"sav|goal|target|reach|how long", str(message), re.I):
+            return savings_goal_calculator(message)
+        guides = globals().get("rag_search")
+        found = guides(message, 3) if guides else []
+        context = "\n".join(f"- {chunk} [{source}]" for chunk, source in found)
+        if globals().get("GEMINI_MODEL"):
+            prompt = message if not context else f"{message}\n\nUseful background (cite the source name):\n{context}"
+            reply = penny_reply(prompt, history)
+            if not reply.startswith(("Sorry", "Penny isn't")):
+                return reply
+        return guides.answer(message) if guides else "Sorry, my guides aren't loaded yet. Run the RAG cell first."
+    except Exception as problem:
+        return f"Sorry, something went wrong: {problem}"
+
+
+# --- The interface ---------------------------------------------------------------------------------------------------
+def create_finance_assistant_ui():
+    """
+    Create a comprehensive Gradio interface for the Smart Finance Assistant
+
+    🤖 AI Collaboration Prompt:
+    "Help me design a Gradio interface that combines CSV upload, spending
+    analysis, chat functionality, and custom tools in a user-friendly
+    layout suitable for a personal finance application."
+
+    Returns:
+        gr.Blocks: call .launch() on it to start the app.
+    """
+    with gr.Blocks(title="Smart Finance Assistant: Savings Coach") as demo:
+        gr.Markdown("# 💰 Smart Finance Assistant: Savings Coach\n"
+                    "Upload your transactions, chat with Penny and plan your savings goals. "
+                    "General information only, not licensed financial advice.")
+
+        with gr.Tab("📊 My Spending"):
+            gr.Markdown("Upload a CSV with Date, Amount and Description columns (Category is optional), "
+                        "or leave it empty and press the button to use the sample data.")
+            upload = gr.File(label="Transactions CSV", file_types=[".csv"])
+            analyse_button = gr.Button("Analyse my spending", variant="primary")
+            status = gr.Markdown()
+            with gr.Row():
+                report = gr.Textbox(label="Spending analysis", lines=22)
+                advice = gr.Textbox(label="Recommendations", lines=22)
+            table = gr.Dataframe(label="Spending by category")
+            analyse_button.click(analyse_file, inputs=upload, outputs=[status, report, advice, table])
+
+        with gr.Tab("💬 Chat with Penny"):
+            gr.ChatInterface(
+                finance_chat,
+                examples=["How big should my emergency fund be?", "What is the 50/30/20 rule?",
+                          "How can I spend less on coffee and takeaway?",
+                          "I have 500 saved, save 200 a month, goal 5000. How long to reach it?"])
+
+        with gr.Tab("🎯 Savings Goal Calculator"):
+            gr.Markdown("Work out how long it takes to reach a savings goal.")
+            with gr.Row():
+                current = gr.Number(label="Current savings ($)", value=500, minimum=0)
+                monthly = gr.Number(label="Saved each month ($)", value=200, minimum=0)
+                target = gr.Number(label="Target ($)", value=5000, minimum=0)
+                rate = gr.Number(label="Yearly interest (%), optional", value=0, minimum=0)
+            calculate = gr.Button("Calculate", variant="primary")
+            goal_result = gr.Textbox(label="Result", lines=8)
+            calculate.click(goal_tool, inputs=[current, monthly, target, rate], outputs=goal_result)
+
+    return demo
+
+
+demo = create_finance_assistant_ui()
+demo.launch()
+
+6. Test with a variety of data - All Tests passed, website opens up.
+
+**9. Foundation Function Tests** 
+1. Understand the problem - Using AI to create comprehensive datasets to test my finance tracker.
+
+2. Inputs - finance tracker, datasets made to test the assistant
+Outputs - hopefully "All Tests Passed"
+
+3. Work the Problem by hand - All tests passed hopefully, and all the systems being able to past the tests following thee realistic dataset created by AI.
+
+4. Write Pseudocode - "All Tests Passed"
+
+5. Convert to Python - import pandas as pd
+
+
+def create_test_datasets():
+    """
+    Create various test datasets for comprehensive testing
+
+    🤖 AI Collaboration Prompt:
+    "Create realistic test datasets for a finance assistant including:
+    1. Normal spending data with various categories
+    2. Edge cases: refunds (negative amounts), missing data, zero amounts
+    3. Data quality issues: invalid formats, extreme values
+    4. Business scenarios: high spending months, savings patterns
+    Include Australian business names and realistic amounts."
+
+    Returns:
+        dict: name -> raw data (a dict of columns), ready for load_and_clean_transaction_data().
+        Spending is negative and income is positive, like a bank export.
+    """
+    def table(rows):
+        dates, amounts, categories, descriptions = zip(*rows)
+        return {"Date": list(dates), "Amount": list(amounts), "Category": list(categories),
+                "Description": list(descriptions)}
+
+    return {
+        # 1. Normal month with a mix of categories
+        "normal": table([
+            ("2026-08-01", 4200.00, "Income", "Salary Perth Council"),
+            ("2026-08-02", -1850.00, "Housing", "Ray White Rent"),
+            ("2026-08-03", -92.40, "Groceries", "Woolworths Subiaco"),
+            ("2026-08-05", -68.15, "Groceries", "Coles Leederville"),
+            ("2026-08-06", -145.30, "Utilities", "Synergy Electricity"),
+            ("2026-08-08", -5.80, "Dining", "Hudsons Coffee"),
+            ("2026-08-09", -38.50, "Dining", "Guzman y Gomez"),
+            ("2026-08-10", -17.99, "Entertainment", "Netflix"),
+            ("2026-08-12", -60.00, "Transport", "BP Fuel"),
+            ("2026-08-15", -120.00, "Shopping", "Kmart"),
+        ]),
+        # 2. Edge cases: refund, zero amount, missing values, exact duplicate
+        "edge_cases": table([
+            ("2026-08-01", 3000.00, "Income", "Salary"),
+            ("2026-08-02", -89.95, "Shopping", "JB Hi-Fi"),
+            ("2026-08-04", 89.95, "Shopping", "JB Hi-Fi refund"),       # refund
+            ("2026-08-05", 0.00, "Dining", "Zambrero"),                 # zero amount
+            ("2026-08-06", None, "Groceries", "Aldi"),                  # missing amount
+            ("2026-08-07", -45.10, "Groceries", None),                  # missing description
+            ("2026-08-08", -22.00, "Dining", "Boost Juice"),
+            ("2026-08-08", -22.00, "Dining", "Boost Juice"),            # exact duplicate row
+        ]),
+        # 3. Data quality problems: bad dates, text amounts, extreme values, $ and commas
+        "quality_issues": {
+            "Date": ["2026-08-01", "not a date", "05/08/2026", "2026-08-10", "2026-08-12"],
+            "Amount": ["$3,000.00", "-$25.00", "abc", "-1,250.00", "-9999999.00"],
+            "Category": ["Income", "Dining", "Shopping", "Housing", "Travel"],
+            "Description": ["Salary", "Hungry Jacks", "Target", "Ray White Rent", "Qantas Flights"],
+        },
+        # 4a. Business scenario: overspending month (spending is more than income)
+        "overspending": table([
+            ("2026-08-01", 2500.00, "Income", "Salary"),
+            ("2026-08-02", -1900.00, "Housing", "Rent"),
+            ("2026-08-10", -450.00, "Shopping", "Myer"),
+            ("2026-08-14", -380.00, "Dining", "Star Bar and Grill"),
+            ("2026-08-20", -310.00, "Entertainment", "Ticketek"),
+        ]),
+        # 4b. Business scenario: strong saver (well above the 20% guide)
+        "strong_saver": table([
+            ("2026-08-01", 5000.00, "Income", "Salary"),
+            ("2026-08-02", -1400.00, "Housing", "Rent"),
+            ("2026-08-05", -300.00, "Groceries", "Woolworths"),
+            ("2026-08-12", -150.00, "Utilities", "Synergy"),
+        ]),
+    }
+
+
+def run_all_tests():
+    """Run every test. Stops at the first failure and says which check failed."""
+    close = lambda a, b, tol=0.01: abs(a - b) <= tol
+    data = create_test_datasets()
+    cleaned = {name: load_and_clean_transaction_data(raw, verbose=False) for name, raw in data.items()
+               if name != "quality_issues"}
+
+    # 1. Normal data
+    result = analyze_spending_patterns(cleaned["normal"])
+    assert close(result["summary"]["income"], 4200.00)
+    assert close(result["summary"]["net_spending"], 2398.14)
+    assert result["by_category"].iloc[0]["Category"] == "Housing"           # biggest category first
+    assert "FINANCIAL RECOMMENDATIONS" in generate_financial_recommendations(result)
+    print("OK 1: normal data")
+
+    # 2. Edge cases: duplicate and missing rows are removed, the refund is netted off
+    edge = cleaned["edge_cases"]
+    assert len(edge) < len(data["edge_cases"]["Date"])                      # bad/duplicate rows were dropped
+    result = analyze_spending_patterns(edge)
+    assert close(result["summary"]["net_spending"], 67.10)               # refund cancels the JB Hi-Fi purchase
+    print("OK 2: edge cases (refund, zero, missing, duplicate)")
+
+    # 3. Data quality: the loader must skip the bad rows instead of crashing
+    messy = load_and_clean_transaction_data(data["quality_issues"], verbose=False)
+    assert 1 <= len(messy) < 5
+    assert "abc" not in messy["Amount"].astype(str).tolist()
+    assert messy["Amount"].abs().max() > 1_000_000                          # the extreme value is kept, not hidden
+    print("OK 3: data quality issues")
+
+    # 4. Business scenarios
+    over = analyze_spending_patterns(cleaned["overspending"])
+    assert over["summary"]["savings_rate_pct"] < 0
+    assert "above income" in generate_financial_recommendations(over)
+    saver = analyze_spending_patterns(cleaned["strong_saver"])
+    assert saver["summary"]["savings_rate_pct"] >= 20
+    assert "at or above" in generate_financial_recommendations(saver)
+    print("OK 4: overspending and strong saver")
+
+    # 5. Savings goal calculator
+    assert calculate_savings_goal(0, 100, 1000)["months"] == 10
+    assert calculate_savings_goal(500, 200, 5000)["months"] == 23
+    assert calculate_savings_goal(5000, 100, 1000)["months"] == 0           # already there
+    assert calculate_savings_goal(0, 100, 5000, 5)["months"] < 50          # interest helps
+    assert "more than 100 years" in savings_goal_calculator("0, 1, 1000000")
+    assert "three numbers" in savings_goal_calculator("hello")
+    for bad in ("-5, 10, 100", "500, 200, 0"):
+        assert "Sorry" in savings_goal_calculator(bad)
+    print("OK 5: savings goal calculator")
+
+    # 6. RAG search
+    guides = setup_financial_rag()
+    assert guides("emergency fund")[0][1] == "Savings guide: emergency fund"
+    assert guides("50/30/20 rule")[0][1] == "Budgeting guide: 50/30/20 rule"
+    assert guides("") == [] and guides("qwertyuiop") == []                  # nothing found is fine
+    print("OK 6: RAG search")
+
+    # 7. Friendly errors
+    for bad in (pd.DataFrame(), "file.csv", None):
+        try:
+            analyze_spending_patterns(bad)
+            raise AssertionError("should have raised ValueError")
+        except ValueError:
+            pass
+    try:
+        generate_financial_recommendations({})
+        raise AssertionError("should have raised ValueError")
+    except ValueError:
+        pass
+    print("OK 7: friendly error messages")
+
+    print("\nAll tests passed.")
+
+
+run_all_tests()
+
+6. Test with a Variety of data - "All tests passed."
+
+**10. Advanced Integration tests**
+1. Understand the problem - creating a test that tests all the functions I have created for my finance assistant.
+
+2. Inputs - tests that include CSV data, analysis, RAG, checks, etc
+Outputs - hopefully "All Tests passed" or the errors stated
+
+3. Work the problem by hand - Realistic tests created in assistance with AI to test my tracker, these tests include realistic CSV data and all the functions that I have built previously.
+
+4. Write Pseudocode - "All tests passed", "testing functions"
+
+5. Convert to Python - # End-to-end test: every part of the Smart Finance Assistant working together on the sample CSV.
+# Run all the earlier cells first (loader, analysis, recommendations, chatbot, RAG, tool).
+
+
+def test_end_to_end():
+    global df, analysis, rag_search                      # the chat and RAG read these notebook variables
+    close = lambda a, b, tol=0.01: abs(a - b) <= tol
+
+    # 1. Load the sample CSV
+    data = load_and_clean_transaction_data("sample_transactions.csv", verbose=False)
+    df = data
+    assert len(data) > 300 and list(data.columns) == ["Date", "Amount", "Category", "Description"]
+    print(f"OK 1: loaded {len(data)} transactions")
+
+    # 2. Complete analysis pipeline: analyse, then recommend
+    result = analyze_spending_patterns(data)
+    assert close(result["summary"]["income"], 37938.70) and close(result["summary"]["net_spending"], 36156.03)
+    assert result["summary"]["savings_rate_pct"] == 4.7
+    assert [t["category"] for t in result["top_categories"]] == ["Housing", "Groceries", "Dining"]
+    advice = generate_financial_recommendations(result)
+    assert "Savings rate: 4.7%" in advice and "YOUR ACTION PLAN" in advice
+    print("OK 2: analysis and recommendations")
+
+    # 3. Chat responses about the data (Penny if connected, otherwise the guides: both must give a real answer)
+    analysis = result
+    rag_search = setup_financial_rag()                  # the chat uses the guides + your transaction summaries
+    question = "How can I save more each month?"
+    if "finance_chat" in globals():
+        reply = finance_chat(question, [])
+    else:
+        reply = penny_reply(question)
+    assert isinstance(reply, str) and len(reply) > 40
+    print("OK 3: chat answered:", reply[:70].replace("\n", " "), "...")
+    if "penny_reply" in globals() and globals().get("GEMINI_MODEL"):
+        direct = penny_reply("In one sentence, what is my savings rate?")
+        print("   Penny says:", direct[:100].replace("\n", " "))
+
+    # 4. RAG retrieval
+    guides = rag_search
+    found = guides("how much should I keep in an emergency fund")
+    assert found and found[0][1] == "Savings guide: emergency fund"
+    assert any(source.startswith("Transaction summary") for source in guides.sources)   # your own data is searchable too
+    assert "50%" in guides("explain the 50/30/20 rule")[0][0]
+    print("OK 4: RAG retrieval")
+
+    # 5. Custom tool
+    answer = savings_goal_calculator("500, 200, 5000")
+    assert "23 months" in answer and "SAVINGS GOAL: $5,000.00" in answer
+    print("OK 5: savings tool")
+
+    # 6. The parts work together: your real monthly saving feeds the calculator
+    monthly_saving = result["summary"]["net_saved"] / result["summary"]["months_covered"]
+    assert monthly_saving > 0
+    plan = savings_goal_calculator(f"0, {monthly_saving:.2f}, 5000")
+    assert "SAVINGS GOAL" in plan and "Time to goal" in plan
+    print(f"OK 6: at your real saving of ${monthly_saving:,.0f} a month: {plan.splitlines()[3].strip()}")
+    print("\nEnd-to-end test passed.")
+
+
+test_end_to_end()
+
+6. Test with a Variety of data - "end-to-end test passed." 
