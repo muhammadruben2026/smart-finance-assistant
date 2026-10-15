@@ -707,4 +707,472 @@ def generate_financial_recommendations(analysis_data):
     report += ["", "General information only, not licensed financial advice."]
     return "\n".join(report)
 
-6. Test with a Variety of Data - 
+6. Test with a Variety of Data - All Tests Passed.
+
+
+**5. Financial Advice Chatbot**
+1. Understand the Problem - Creating a friendly and professional chatbot that can provide advice based on spending transaction analysis.
+
+2. Inputs - Gemini AI Key, CSV data, users spending patterns/trends 
+Outputs - A chatbot that is able to assist and provide advice based on the users spending habits.
+
+3. Work the Problem by hand - if the user has bad spending habits that exceeds their income the chatbot can provide advice on what categories to cut spending on. If the user has good spending habits the AI can motivate them to keep going and motivate the user to reach their savings goal.
+
+4. Write Pseudocode - If the user has bad spending habits messages the chatbot could use are, "Your spending is putting you at danger, cutting down on xxx will save you this $xxx".
+If the user has good spending habits messages the chatbot could use are, "Your spending habits are great and are getting you closer to your savings goal of $xxx, keep going!".
+
+5. Convert to Python - import os
+
+import requests
+
+# One cell, no extra packages: Penny talks to Gemini directly using the key in your Colab Secrets.
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
+SECRET_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY", "GOOGLE_GEMINI_API_KEY", "GEMINI")
+SKIP_WORDS = ("lite", "image", "tts", "live", "audio", "embed", "vision", "exp", "thinking")
+
+PENNY_PERSONA = """You are Penny, a friendly and professional personal finance coach for Australians.
+Be warm, encouraging and practical. Use plain language and short answers (3 to 6 sentences) with one or
+two specific next steps. Amounts are in Australian dollars. Use the user's spending facts below when they
+are provided, and never invent transactions or figures. You give general financial education, not licensed
+advice; for big decisions suggest a licensed adviser."""
+
+
+def _find_key():
+    """Read the Gemini key from Colab Secrets (it is never printed)."""
+    try:
+        from google.colab import userdata
+    except ImportError:
+        return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    for name in SECRET_NAMES:
+        try:
+            return userdata.get(name)
+        except Exception:                 # secret missing, or 'Notebook access' is off
+            continue
+    return None
+
+
+def _api_error(reply):
+    """Short, readable reason from a failed Gemini request."""
+    try:
+        detail = reply.json()["error"]["message"]
+    except Exception:
+        detail = reply.text[:200]
+    hints = {400: "the key may be invalid", 401: "the key was rejected", 403: "the key doesn't have access",
+             404: "the model name wasn't found", 429: "too many requests or the free limit was reached"}
+    return f"HTTP {reply.status_code} ({hints.get(reply.status_code, 'request failed')}): {detail}"
+
+
+GEMINI_KEY = _find_key()
+GEMINI_MODEL = None
+if not GEMINI_KEY:
+    print("No Gemini key found. Click the key icon (Secrets) on the left, add a secret named GEMINI_API_KEY "
+          "with your key, switch 'Notebook access' on, then run this cell again.")
+else:
+    try:                                   # pick a current Gemini 'flash' model that can chat
+        reply = requests.get(f"{GEMINI_API}/models", headers={"x-goog-api-key": GEMINI_KEY},
+                             params={"pageSize": 200}, timeout=20)
+        reply.raise_for_status()
+        names = [m["name"].split("/")[-1] for m in reply.json().get("models", [])
+                 if "generateContent" in m.get("supportedGenerationMethods", [])]
+        flash = sorted((n for n in names if n.startswith("gemini") and "flash" in n
+                        and not any(word in n for word in SKIP_WORDS)), reverse=True)
+        GEMINI_MODEL = (flash or [n for n in names if n.startswith("gemini")] or ["gemini-2.5-flash"])[0]
+    except requests.HTTPError:
+        print("Gemini rejected the request:", _api_error(reply))
+    except Exception as problem:
+        print("Could not reach Gemini:", problem)
+
+
+def spending_facts():
+    """Short summary of your analysis (if you have run analyze_spending_patterns) for Penny to use."""
+    result = globals().get("analysis")
+    if not isinstance(result, dict) or "summary" not in result:
+        return ""
+    s = result["summary"]
+    lines = [f"Income ${s['income']:,.2f}, net spending ${s['net_spending']:,.2f}, saved ${s['net_saved']:,.2f} "
+             f"over {s['months_covered']} months; savings rate {s['savings_rate_pct']}%."]
+    lines += [f"{t['category']}: ${t['total']:,.2f} ({t['share_pct']}% of spending)"
+              for t in result.get("top_categories", [])]
+    lines += result.get("insights", [])[:5]
+    return "\n".join(lines)
+
+
+def penny_reply(message, history=None):
+    """Ask Penny a question. `history` is optional: a list of {'role','content'} dicts or (user, bot) pairs."""
+    if not GEMINI_KEY or not GEMINI_MODEL:
+        return "Penny isn't connected yet. Run the setup above and check the message it printed."
+    contents = []
+    for turn in (history or [])[-8:]:
+        pairs = ([("user" if turn["role"] == "user" else "model", str(turn["content"]))]
+                 if isinstance(turn, dict) else [("user", str(turn[0])), ("model", str(turn[1]))])
+        contents += [{"role": role, "parts": [{"text": text}]} for role, text in pairs if text]
+    contents.append({"role": "user", "parts": [{"text": message}]})
+
+    system_text = PENNY_PERSONA
+    facts = spending_facts()
+    if facts:
+        system_text += "\n\nThe user's spending facts:\n" + facts
+    try:
+        reply = requests.post(f"{GEMINI_API}/models/{GEMINI_MODEL}:generateContent",
+                              headers={"x-goog-api-key": GEMINI_KEY},
+                              json={"system_instruction": {"parts": [{"text": system_text}]}, "contents": contents},
+                              timeout=60)
+        if not reply.ok:
+            return "Sorry, Gemini returned an error: " + _api_error(reply)
+        parts = reply.json()["candidates"][0]["content"]["parts"]
+        return "".join(part.get("text", "") for part in parts).strip() or "(Penny had nothing to say, try rephrasing.)"
+    except (KeyError, IndexError):
+        return "Sorry, Gemini's reply was blocked or empty. Try rephrasing your question."
+    except Exception as problem:
+        return f"Sorry, I couldn't reach Gemini: {problem}"
+
+
+if GEMINI_MODEL:
+    print(f"Penny is connected (model: {GEMINI_MODEL}). Test reply:\n")
+    print(penny_reply("Say hello and introduce yourself in two sentences."))
+
+6. Test with a Variety of Data - All Tests Passed.
+
+**6. RAG System** 
+1. Understand the Problem - Setting up a RAG system that can retrieve data from financial documents, budgeting guides, and transaction summaries.
+
+2. Inputs - Financial documents, budgeting guides, transaction summaries
+Outputs - Answer the users questions about their finances, summaries from documents that are too long to read.
+
+3. Work the Problem by hand - Implementing a system that can generate important points from documents that may benefit the user in their spending and budgeting.
+
+4. Write Pseudocode - Budgeting Guide 50/30/20, essentially the finance assistant producing guides/tips that benefit the user and inform them on what to do in their future spending, and ways to save.
+
+5. Convert to Python - import math
+import os
+import re
+from collections import Counter
+
+# Optional: hands-on-ai embeddings are only used if you switch this on AND the AI server works.
+# Keyword search (the default) needs no server, so the RAG always works.
+USE_EMBEDDINGS = False
+INDEX_PATH = "finance_index.npz"
+
+# --- 1. The documents (budgeting guides and savings advice). Add or edit paragraphs freely. -------
+FINANCE_DOCUMENTS = {
+    "Budgeting guide: 50/30/20 rule": """
+The 50/30/20 rule splits after-tax income into three parts: 50% for needs, 30% for wants and 20% for savings or debt repayment.
+Needs are things you must pay such as rent, utilities, groceries, insurance, transport to work and minimum debt payments.
+Wants are dining out, entertainment, shopping, holidays and subscriptions you could live without.
+If your needs are above 50% of income, look at rent, energy, phone and insurance providers before cutting wants.
+""",
+    "Savings guide: emergency fund": """
+An emergency fund is money kept aside for surprises such as car repairs, medical bills or losing a job.
+A good first goal is $1,000, then build towards three to six months of essential expenses.
+Keep the emergency fund in a separate high interest savings account so it is not spent by accident.
+Automatic transfers on payday are the easiest way to build the fund because you never see the money.
+""",
+    "Savings guide: saving habits": """
+Pay yourself first: move your savings out on payday, then spend what is left.
+Set a clear goal with an amount and a date, then divide it by the number of weeks or months to get a regular amount.
+Round up purchases, put windfalls like tax refunds and bonuses into savings, and review progress every month.
+A savings rate of about 20% of income is a common target, but any regular saving is a good start.
+""",
+    "Spending guide: small purchases": """
+Small purchases such as coffee, takeaway and snacks feel harmless but add up to hundreds or thousands of dollars a year.
+Track purchases under $25 for a month to see the total, then set a weekly limit for them.
+Cutting small purchases by a quarter is often easier than cutting a big bill, and the savings add up quickly.
+""",
+    "Spending guide: subscriptions": """
+Subscriptions like streaming, music, gym and apps renew automatically and are easy to forget.
+List every recurring charge, cancel what you have not used in a month and share family plans where you can.
+Check your bank statement every three months for charges you do not recognise.
+""",
+    "Debt guide: paying off debt": """
+List your debts with their interest rates. The avalanche method pays the highest interest debt first and saves the most money.
+The snowball method pays the smallest balance first, which gives quick wins and keeps you motivated.
+Always pay at least the minimum on every debt and avoid new credit card spending while you pay down balances.
+""",
+}
+
+STOP_WORDS = set("a an and are as at be by can do does for from how i if in is it me my of on or so that the "
+                 "this to was what when which with you your should would about get".split())
+
+
+def _words(text):
+    """Lower-case words with a tiny bit of stemming (savings -> saving, bills -> bill)."""
+    found = []
+    for word in re.findall(r"[a-z0-9$%]+", text.lower()):
+        if word in STOP_WORDS:
+            continue
+        for ending in ("ings", "ing", "es", "s"):
+            if word.endswith(ending) and len(word) - len(ending) >= 3:
+                word = word[: -len(ending)]
+                break
+        found.append(word)
+    return found
+
+
+def _transaction_summaries():
+    """Turn the cleaned transactions (`df`) into a few plain-English summary paragraphs, if df exists."""
+    data = globals().get("df")
+    if data is None or not hasattr(data, "columns") or not {"Date", "Amount"} <= set(data.columns):
+        return {}
+    try:
+        table = data.copy()
+        category = table["Category"] if "Category" in table.columns else "Uncategorised"
+        table["_cat"] = category
+        table["_month"] = table["Date"].dt.strftime("%B %Y")
+        summaries = {}
+        for month, rows in table.groupby("_month", sort=False):
+            income = rows.loc[rows["_cat"] == "Income", "Amount"].sum()
+            spend = rows.loc[rows["_cat"] != "Income"]
+            if len(spend) and (spend["Amount"] < 0).sum() >= (spend["Amount"] > 0).sum():
+                spend = spend.assign(Amount=-spend["Amount"])
+            top = spend.groupby("_cat")["Amount"].sum().sort_values(ascending=False).head(3)
+            parts = ", ".join(f"{name} ${value:,.2f}" for name, value in top.items())
+            summaries[f"Transaction summary: {month}"] = (
+                f"In {month} income was ${income:,.2f} and spending was ${spend['Amount'].sum():,.2f}. "
+                f"The biggest spending categories were {parts}.")
+        return summaries
+    except Exception:
+        return {}
+
+
+def _split_into_chunks(text, max_words=70):
+    """Split a document into short chunks (one per paragraph/line group)."""
+    chunks, current = [], []
+    for line in (l.strip() for l in text.strip().splitlines()):
+        if line:
+            current.append(line)
+        if current and (not line or len(" ".join(current).split()) >= max_words):
+            chunks.append(" ".join(current))
+            current = []
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
+
+def setup_financial_rag(extra_documents=None, use_embeddings=None):
+    """
+    Set up RAG system for financial documents and transaction data
+
+    🤖 AI Collaboration Prompt:
+    "Help me set up a RAG system that can retrieve information from financial
+    documents, budgeting guides, and transaction summaries to answer user
+    questions about personal finance."
+
+    Args:
+        extra_documents: optional dict {"name": "text"} of your own documents to add.
+        use_embeddings: True to try hands-on-ai embeddings (needs a working AI server).
+    Returns:
+        function: retrieve(question, k=3) -> list of (chunk, source) tuples, best match first.
+                  Also has .chunks, .method and .answer(question) attributes.
+    """
+    # --- Document ingestion: guides + your extra documents + summaries of your transactions ----------
+    documents = dict(FINANCE_DOCUMENTS)
+    documents.update(_transaction_summaries())
+    if extra_documents:
+        documents.update(extra_documents)
+    chunks, sources = [], []
+    for name, text in documents.items():
+        for piece in _split_into_chunks(text):
+            chunks.append(piece)
+            sources.append(name)
+    if not chunks:
+        raise ValueError("No documents to search. Add some text to FINANCE_DOCUMENTS.")
+
+    # --- Keyword index (always built, works offline) -----------------------------------------------------
+    chunk_words = [Counter(_words(f"{source} {chunk}")) for chunk, source in zip(chunks, sources)]
+    document_counts = Counter(word for words in chunk_words for word in words)
+
+    def keyword_search(question, k):
+        wanted = set(_words(question))
+        scored = []
+        for index, words in enumerate(chunk_words):
+            score = sum((1 + math.log(1 + words[w])) * math.log(1 + len(chunks) / document_counts[w])
+                        for w in wanted if w in words)
+            if score > 0:
+                scored.append((score, index))
+        scored.sort(reverse=True)
+        return [(chunks[i], sources[i]) for _, i in scored[:k]]
+
+    # --- Optional: embeddings through hands-on-ai ---------------------------------------------------------
+    embedding_search, method = None, "keyword search"
+    if (USE_EMBEDDINGS if use_embeddings is None else use_embeddings) and os.environ.get("HANDS_ON_AI_SERVER"):
+        try:
+            from hands_on_ai.rag.utils import get_embeddings, get_top_k, save_index_with_sources
+            save_index_with_sources(chunks, get_embeddings(chunks), sources, INDEX_PATH)
+            embedding_search = lambda question, k: list(get_top_k(question, INDEX_PATH, k=k))
+            method = "embeddings (hands-on-ai)"
+        except Exception as problem:
+            print("Embeddings aren't available, using keyword search instead:", str(problem)[:120])
+
+    def retrieve(question, k=3):
+        """Return the k most relevant (chunk, source) pairs for a question."""
+        if not str(question).strip():
+            return []
+        if embedding_search:
+            try:
+                return embedding_search(question, k)
+            except Exception:
+                pass                                       # server went away: fall back to keywords
+        return keyword_search(question, k)
+
+    def answer(question, k=3):
+        """Answer using the retrieved text. Uses Penny (the AI) if she is connected, else quotes the best matches."""
+        found = retrieve(question, k)
+        if not found:
+            return "I couldn't find anything about that in my guides. Try asking about budgeting, saving or debt."
+        context = "\n".join(f"- {chunk} [{source}]" for chunk, source in found)
+        ask = globals().get("penny_reply")
+        if ask and globals().get("GEMINI_MODEL"):
+            reply = ask(f"Answer using ONLY this information, and mention the source name.\n{context}\n\nQuestion: {question}")
+            if not reply.startswith(("Sorry", "Penny isn't")):
+                return reply
+        return "Here is what my guides say:\n" + context
+
+    retrieve.answer, retrieve.chunks, retrieve.sources, retrieve.method = answer, chunks, sources, method
+    print(f"RAG ready: {len(chunks)} chunks from {len(documents)} documents ({method}).")
+    return retrieve
+
+
+# --- Try it ----------------------------------------------------------------------------------------------------
+rag_search = setup_financial_rag()
+for question in ["How big should my emergency fund be?", "What is the 50/30/20 rule?",
+                 "How can I cut down on coffee and takeaway?"]:
+    print("\nQ:", question)
+    for chunk, source in rag_search(question, k=2):
+        print(f"  [{source}] {chunk[:110]}...")
+
+6. Test with a Variety of Data - All Tests Passed.
+
+**7. Custom Tool Development**
+1. Understand the Problem - Creating financial tools that would benefit the user and make their budgeting/spend journey easier and making sure the format is user-friendly.
+
+2. Inputs - Values inputted by the user, CSV data list, Spending habits/trends
+Outputs - Values ready and calculated for the user, amounts the user needs to reach their goal essentially.
+
+3. Work the Problem by hand - Building a financial calculator that can help solve users problems and also this calculator can help find what amounts users may need to save to reach their future goals.
+
+4. Write Pseudocode - something similar to this ef calculate_savings_goal(current, monthly, target, annual_rate), to help calculate users needs and find what amounts they need in order to reach their goal.
+
+5. Convert to Python - import math
+import re
+from datetime import date
+
+from hands_on_ai import agent
+
+MAX_MONTHS = 1200      # stop after 100 years: the goal is effectively out of reach
+
+
+def calculate_savings_goal(current, monthly, target, annual_rate_pct=0.0):
+    """Months needed to go from `current` to `target` saving `monthly` (optional yearly interest, in %)."""
+    for name, value in (("current savings", current), ("monthly saving", monthly),
+                        ("target", target), ("interest rate", annual_rate_pct)):
+        if value is None or isinstance(value, bool) or not isinstance(value, (int, float)) or math.isnan(value):
+            raise ValueError(f"The {name} must be a number.")
+    if current < 0 or monthly < 0 or annual_rate_pct < 0:
+        raise ValueError("Savings, monthly saving and interest rate can't be negative.")
+    if target <= 0:
+        raise ValueError("The target must be more than $0.")
+    if annual_rate_pct > 100:
+        raise ValueError("The interest rate looks too high. Enter it as a percent, for example 4.5.")
+
+    result = {"current": current, "monthly": monthly, "target": target, "rate": annual_rate_pct}
+    if current >= target:
+        return {**result, "months": 0, "balance": current, "interest_earned": 0.0, "reached": True}
+
+    monthly_rate, balance, months = annual_rate_pct / 100 / 12, current, 0
+    while balance < target and months < MAX_MONTHS:
+        balance = balance * (1 + monthly_rate) + monthly
+        months += 1
+        if monthly == 0 and monthly_rate == 0:
+            break
+    reached = balance >= target
+    interest = balance - current - monthly * months
+    return {**result, "months": months, "balance": balance, "interest_earned": max(interest, 0.0), "reached": reached}
+
+
+def _add_months(start, months):
+    index = start.year * 12 + start.month - 1 + months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def _format_goal(r):
+    money = lambda x: f"${x:,.2f}"
+    if r["months"] == 0:
+        return f"Great news: you have already reached your {money(r['target'])} goal (you have {money(r['current'])})."
+    if not r["reached"]:
+        if r["monthly"] == 0:
+            return "With $0 a month going in, you won't reach this goal. Try adding a regular monthly amount."
+        return "At that pace the goal would take more than 100 years. Try a bigger monthly amount or a smaller target."
+    years, months = divmod(r["months"], 12)
+    time_text = " and ".join(part for part in (f"{years} year{'s' * (years != 1)}" if years else "",
+                                               f"{months} month{'s' * (months != 1)}" if months else "") if part)
+    lines = [f"SAVINGS GOAL: {money(r['target'])}",
+             f"  Starting savings : {money(r['current'])}",
+             f"  Saving each month: {money(r['monthly'])}" + (f"  (interest {r['rate']:g}% a year)" if r["rate"] else ""),
+             f"  Time to goal     : {time_text} ({r['months']} months)",
+             f"  Target date      : {_add_months(date.today(), r['months']).strftime('%B %Y')}"]
+    if r["rate"]:
+        lines.append(f"  Interest earned  : about {money(r['interest_earned'])}")
+    lines.append(f"  Tip: saving an extra $50 a month would get you there sooner.")
+    return "\n".join(lines)
+
+
+def savings_goal_calculator(text):
+    """
+    Agent tool. Input: one text with 3 numbers (and an optional 4th):
+    'current savings, monthly saving, target [, yearly interest %]'  e.g. '500, 200, 5000, 4.5'
+    Output: a friendly text answer (or a friendly error message).
+    """
+    text = str(text)
+    if re.search(r"-\s*\$?\d", text):
+        return "Sorry, I couldn't work that out: numbers can't be negative."
+    # '$1,000' keeps its thousands comma; if that leaves too few numbers, treat commas as separators ('100,100,50')
+    values = []
+    for pattern in (r"\d{1,3}(?:,\d{3})+(?![\d])(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+", r"\d+(?:\.\d+)?|\.\d+"):
+        values = [float(n.replace(",", "")) for n in re.findall(pattern, text)]
+        if len(values) >= 3:
+            break
+    if len(values) < 3:
+        return ("I need three numbers: current savings, how much you save each month, and your target. "
+                "For example: 500, 200, 5000  (you can add a yearly interest rate as a 4th number, like 4.5).")
+    try:
+        return _format_goal(calculate_savings_goal(values[0], values[1], values[2],
+                                                   values[3] if len(values) > 3 else 0.0))
+    except ValueError as problem:
+        return f"Sorry, I couldn't work that out: {problem}"
+
+
+def create_savings_calculator_tool():
+    """
+    Create a custom savings goal calculator as an agent tool
+
+    🤖 AI Collaboration Prompt:
+    "Create a savings goal calculator function that takes current savings,
+    monthly contribution, and target amount, then calculates time to reach
+    goal. Format output for user-friendly display."
+
+    Returns:
+        function: the calculator (takes one text, returns one text), already registered as an agent tool.
+    """
+    agent.register_tool(
+        "savings_goal_calculator",
+        "Works out how long it takes to reach a savings goal. Input: 'current savings, monthly saving, "
+        "target' as numbers, optionally followed by a yearly interest rate in percent. "
+        "Example: '500, 200, 5000, 4.5'.",
+        savings_goal_calculator,
+    )
+    return savings_goal_calculator
+
+
+# --- Register it and try it (works without any AI server) ------------------------------------------------
+savings_tool = create_savings_calculator_tool()
+print("Tool registered: savings_goal_calculator\n")
+print(savings_tool("500, 200, 5000"))
+print()
+print(savings_tool("current $1,000 monthly $250 target $10,000 rate 4.5"))
+print()
+print(savings_tool("abc"))
+
+6. Test with a Variety of Data - All Tests Passed.
+
+
+**
